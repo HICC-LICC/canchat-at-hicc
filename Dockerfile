@@ -27,7 +27,6 @@ RUN npm run build
 ######## WebUI backend ########
 FROM python:3.11-slim-bookworm AS base
 
-# Build arguments
 ARG USE_CUDA
 ARG USE_OLLAMA
 ARG USE_CUDA_VER
@@ -36,7 +35,6 @@ ARG USE_RERANKING_MODEL
 ARG UID
 ARG GID
 
-# Environment variables
 ENV ENV=prod \
     PORT=8080 \
     USE_OLLAMA_DOCKER=${USE_OLLAMA} \
@@ -64,10 +62,17 @@ WORKDIR /app/backend
 
 ENV HOME=/root
 
+# If you need a proxy, uncomment and set these lines:
+# ENV http_proxy=http://your.proxy:port
+# ENV https_proxy=http://your.proxy:port
+
 # Overwrite apt sources.list with HTTPS sources (fixes HTTP 470 error)
 RUN echo "deb https://deb.debian.org/debian bookworm main\n\
 deb https://deb.debian.org/debian-security bookworm-security main\n\
 deb https://deb.debian.org/debian bookworm-updates main" > /etc/apt/sources.list
+
+# Install CA certificates early for pip SSL
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Create user and group if not root
 RUN if [ "$UID" -ne 0 ]; then \
