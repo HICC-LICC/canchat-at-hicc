@@ -32,7 +32,7 @@ ARG UID=0
 ARG GID=0
 
 # Base image
-FROM python:3.12-bookworm-slim AS base
+FROM python:3.12-slim-bookworm AS base
 
 # Propagate build args
 ARG USE_CUDA
