@@ -64,8 +64,10 @@ WORKDIR /app/backend
 
 ENV HOME=/root
 
-# Fix apt sources to use HTTPS (handles all .list files, avoids sed error)
-RUN find /etc/apt/ -name '*.list' -exec sed -i 's|http://|https://|g' {} + || true
+# Overwrite apt sources.list with HTTPS sources (fixes HTTP 470 error)
+RUN echo "deb https://deb.debian.org/debian bookworm main\n\
+deb https://deb.debian.org/debian-security bookworm-security main\n\
+deb https://deb.debian.org/debian bookworm-updates main" > /etc/apt/sources.list
 
 # Create user and group if not root
 RUN if [ "$UID" -ne 0 ]; then \
