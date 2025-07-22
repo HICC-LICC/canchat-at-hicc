@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
 
+# ==== BUILD ARGS (can override with --build-arg) ====
 ARG USE_CUDA=false
 ARG USE_OLLAMA=false
 ARG USE_CUDA_VER=cu121
@@ -27,6 +28,7 @@ RUN npm run build
 ######## WebUI backend ########
 FROM python:3.11-slim-bookworm AS base
 
+# ==== ARGs and ENVs ====
 ARG USE_CUDA
 ARG USE_OLLAMA
 ARG USE_CUDA_VER
@@ -59,22 +61,26 @@ ENV ENV=prod \
     HF_HOME="/app/backend/data/cache/embedding/models"
 
 WORKDIR /app/backend
-
 ENV HOME=/root
 
-# If you need a proxy, uncomment and set these lines:
+# === Proxy/Mirror Config (Uncomment as needed) ===
 # ENV http_proxy=http://your.proxy:port
 # ENV https_proxy=http://your.proxy:port
+# ENV PIP_INDEX_URL=https://pypi.org/simple
+# ENV PIP_INDEX_URL=https://your.company.mirror/simple
 
-# Overwrite apt sources.list with HTTPS sources (fixes HTTP 470 error)
+# === Fix apt sources to use HTTPS ===
 RUN echo "deb https://deb.debian.org/debian bookworm main\n\
 deb https://deb.debian.org/debian-security bookworm-security main\n\
 deb https://deb.debian.org/debian bookworm-updates main" > /etc/apt/sources.list
 
-# Install CA certificates early for pip SSL
+# === Install CA certificates early for pip SSL ===
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 
-# Create user and group if not root
+# === Optional: basic debug, network test (uncomment for troubleshooting) ===
+# RUN apt-get update && apt-get install -y curl && curl -Iv https://pypi.org/simple/
+
+# === User/Group Setup ===
 RUN if [ "$UID" -ne 0 ]; then \
       if [ "$GID" -ne 0 ]; then addgroup --gid $GID app; fi; \
       adduser --uid $UID --gid $GID --home $HOME --disabled-password --no-create-home app; \
@@ -84,7 +90,7 @@ RUN mkdir -p $HOME/.cache/chroma \
     && echo -n 00000000-0000-0000-0000-000000000000 > $HOME/.cache/chroma/telemetry_user_id \
     && chown -R $UID:$GID /app $HOME
 
-# Install system dependencies (OLLAMA branch vs default)
+# === Install system dependencies ===
 RUN if [ "$USE_OLLAMA" = "true" ]; then \
       apt-get update && \
       apt-get install -y --no-install-recommends \
@@ -100,31 +106,40 @@ RUN if [ "$USE_OLLAMA" = "true" ]; then \
       rm -rf /var/lib/apt/lists/*; \
     fi
 
-COPY --chown=$UID:$GID ./backend/requirements.txt ./requirements.txt
+# === Python & pip dependencies ===
 
-# Install Python dependencies and pre-download models
-RUN pip3 install --upgrade pip && pip3 install uv && \
-    if [ "$USE_CUDA" = "true" ]; then \
-      pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/$USE_CUDA_DOCKER_VER --no-cache-dir && \
-      uv pip install --system -r requirements.txt --no-cache-dir; \
+# Separate steps for clarity and caching!
+RUN pip3 install --upgrade pip
+
+RUN pip3 install uv
+
+ARG USE_CUDA
+ARG USE_CUDA_DOCKER_VER
+
+RUN if [ "$USE_CUDA" = "true" ]; then \
+      pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/$USE_CUDA_DOCKER_VER --no-cache-dir; \
     else \
-      pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --no-cache-dir && \
-      uv pip install --system -r requirements.txt --no-cache-dir; \
-    fi && \
-    python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('RAG_EMBEDDING_MODEL','sentence-transformers/all-MiniLM-L6-v2'), device='cpu')" && \
-    python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ.get('WHISPER_MODEL','base'), device='cpu', compute_type='int8', download_root=os.environ.get('WHISPER_MODEL_DIR','/app/backend/data/cache/whisper/models'))" && \
-    python -c "import os; import tiktoken; tiktoken.get_encoding(os.environ.get('TIKTOKEN_ENCODING_NAME','cl100k_base'))" && \
-    chown -R $UID:$GID /app/backend/data/
+      pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --no-cache-dir; \
+    fi
 
-# Copy frontend build files
+COPY --chown=$UID:$GID ./backend/requirements.txt ./requirements.txt
+RUN uv pip install --system -r requirements.txt --no-cache-dir
+
+# === Pre-download models for a warm start (safe to skip for faster builds) ===
+RUN python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('RAG_EMBEDDING_MODEL','sentence-transformers/all-MiniLM-L6-v2'), device='cpu')"
+RUN python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ.get('WHISPER_MODEL','base'), device='cpu', compute_type='int8', download_root=os.environ.get('WHISPER_MODEL_DIR','/app/backend/data/cache/whisper/models'))"
+RUN python -c "import os; import tiktoken; tiktoken.get_encoding(os.environ.get('TIKTOKEN_ENCODING_NAME','cl100k_base'))"
+RUN chown -R $UID:$GID /app/backend/data/
+
+# === Copy frontend build ===
 COPY --chown=$UID:$GID --from=build /app/build /app/build
 COPY --chown=$UID:$GID --from=build /app/CHANGELOG.md /app/CHANGELOG.md
 COPY --chown=$UID:$GID --from=build /app/package.json /app/package.json
 
-# Copy backend files
+# === Copy backend files ===
 COPY --chown=$UID:$GID ./backend .
 
-# Provide group with same permissions as user (OpenShift compatibility)
+# === Group permissions (OpenShift compatibility) ===
 RUN chmod -R g=u /app $HOME
 
 EXPOSE 8080
