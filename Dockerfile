@@ -106,24 +106,15 @@ RUN echo -n 00000000-0000-0000-0000-000000000000 > $HOME/.cache/chroma/telemetry
 # Make sure the user has access to the app and root directory
 RUN chown -R $UID:$GID /app $HOME
 
-RUN echo "deb https://deb.debian.org/debian bookworm main" > /etc/apt/sources.list && \
-    echo "deb https://deb.debian.org/debian-security bookworm-security main" >> /etc/apt/sources.list && \
-    echo "deb https://deb.debian.org/debian-updates bookworm-updates main" >> /etc/apt/sources.list && \
-    apt-get update && \
-    if [ "$USE_OLLAMA" = "true" ]; then \
-        apt-get install -y --no-install-recommends \
-            git build-essential pandoc netcat-openbsd curl \
-            gcc python3-dev \
-            ffmpeg libsm6 libxext6 \
-            jq && \
-        curl -fsSL https://ollama.com/install.sh | sh; \
-    else \
-        apt-get install -y --no-install-recommends \
-            git build-essential pandoc gcc netcat-openbsd curl jq \
-            python3-dev \
-            ffmpeg libsm6 libxext6; \
-    fi && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+       ca-certificates \
+       git build-essential pandoc netcat-openbsd curl \
+       gcc python3-dev ffmpeg libsm6 libxext6 jq \
+ && if [ "$USE_OLLAMA" = "true" ]; then \
+      curl -fsSL https://ollama.com/install.sh | sh; \
+    fi \
+ && rm -rf /var/lib/apt/lists/*
 
 # install python dependencies
 COPY --chown=$UID:$GID ./backend/requirements.txt ./requirements.txt
