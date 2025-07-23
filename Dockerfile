@@ -1,3 +1,4 @@
+
 # syntax=docker/dockerfile:1
 
 # ==== BUILD ARGS (can override with --build-arg) ====
@@ -52,35 +53,23 @@ ENV ENV=prod \
     DO_NOT_TRACK=true \
     ANONYMIZED_TELEMETRY=false \
     WHISPER_MODEL="base" \
-    WHISPER_MODEL_DIR="/app/backend/data/cache/whisper/models" \
-    RAG_EMBEDDING_MODEL="$USE_EMBEDDING_MODEL" \
+    WHISPER_MODEL_DIR="/models/whisper/base" \
+    RAG_EMBEDDING_MODEL="/models/all-MiniLM-L6-v2" \
     RAG_RERANKING_MODEL="$USE_RERANKING_MODEL" \
-    SENTENCE_TRANSFORMERS_HOME="/app/backend/data/cache/embedding/models" \
+    SENTENCE_TRANSFORMERS_HOME="/models" \
     TIKTOKEN_ENCODING_NAME="cl100k_base" \
-    TIKTOKEN_CACHE_DIR="/app/backend/data/cache/tiktoken" \
-    HF_HOME="/app/backend/data/cache/embedding/models"
+    TIKTOKEN_CACHE_DIR="/models/tiktoken" \
+    HF_HOME="/models"
 
 WORKDIR /app/backend
 ENV HOME=/root
 
-# === Proxy/Mirror Config (Uncomment as needed) ===
-# ENV http_proxy=http://your.proxy:port
-# ENV https_proxy=http://your.proxy:port
-# ENV PIP_INDEX_URL=https://pypi.org/simple
-# ENV PIP_INDEX_URL=https://your.company.mirror/simple
-
-# === Fix apt sources to use HTTPS ===
 RUN echo "deb https://deb.debian.org/debian bookworm main\n\
 deb https://deb.debian.org/debian-security bookworm-security main\n\
 deb https://deb.debian.org/debian bookworm-updates main" > /etc/apt/sources.list
 
-# === Install CA certificates early for pip SSL ===
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 
-# === Optional: basic debug, network test (uncomment for troubleshooting) ===
-# RUN apt-get update && apt-get install -y curl && curl -Iv https://pypi.org/simple/
-
-# === User/Group Setup ===
 RUN if [ "$UID" -ne 0 ]; then \
       if [ "$GID" -ne 0 ]; then addgroup --gid $GID app; fi; \
       adduser --uid $UID --gid $GID --home $HOME --disabled-password --no-create-home app; \
@@ -90,7 +79,6 @@ RUN mkdir -p $HOME/.cache/chroma \
     && echo -n 00000000-0000-0000-0000-000000000000 > $HOME/.cache/chroma/telemetry_user_id \
     && chown -R $UID:$GID /app $HOME
 
-# === Install system dependencies ===
 RUN if [ "$USE_OLLAMA" = "true" ]; then \
       apt-get update && \
       apt-get install -y --no-install-recommends \
@@ -106,11 +94,7 @@ RUN if [ "$USE_OLLAMA" = "true" ]; then \
       rm -rf /var/lib/apt/lists/*; \
     fi
 
-# === Python & pip dependencies ===
-
-# Separate steps for clarity and caching!
 RUN pip3 install --upgrade pip
-
 RUN pip3 install uv
 
 ARG USE_CUDA
@@ -125,26 +109,28 @@ RUN if [ "$USE_CUDA" = "true" ]; then \
 COPY --chown=$UID:$GID ./backend/requirements.txt ./requirements.txt
 RUN uv pip install --system -r requirements.txt --no-cache-dir
 
-# === Pre-download models for a warm start (safe to skip for faster builds) ===
-RUN python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('RAG_EMBEDDING_MODEL','sentence-transformers/all-MiniLM-L6-v2'), device='cpu')"
-RUN python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ.get('WHISPER_MODEL','base'), device='cpu', compute_type='int8', download_root=os.environ.get('WHISPER_MODEL_DIR','/app/backend/data/cache/whisper/models'))"
-RUN python -c "import os; import tiktoken; tiktoken.get_encoding(os.environ.get('TIKTOKEN_ENCODING_NAME','cl100k_base'))"
-RUN chown -R $UID:$GID /app/backend/data/
+# === Copy pre-downloaded models ===
+COPY --chown=$UID:$GID ./all-MiniLM-L6-v2 /models/all-MiniLM-L6-v2
+COPY --chown=$UID:$GID ./whisper/base /models/whisper/base
+COPY --chown=$UID:$GID ./tiktoken /models/tiktoken
 
-# === Copy frontend build ===
+# === Preload models from local paths ===
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('/models/all-MiniLM-L6-v2', device='cpu')"
+RUN python -c "from faster_whisper import WhisperModel; WhisperModel('base', device='cpu', compute_type='int8', download_root='/models/whisper')"
+RUN python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
+RUN chown -R $UID:$GID /models
+
 COPY --chown=$UID:$GID --from=build /app/build /app/build
 COPY --chown=$UID:$GID --from=build /app/CHANGELOG.md /app/CHANGELOG.md
 COPY --chown=$UID:$GID --from=build /app/package.json /app/package.json
 
-# === Copy backend files ===
 COPY --chown=$UID:$GID ./backend .
 
-# === Group permissions (OpenShift compatibility) ===
 RUN chmod -R g=u /app $HOME
 
 EXPOSE 8080
 
-HEALTHCHECK CMD curl --silent --fail http://localhost:${PORT:-8080}/health | jq -ne 'input.status == true' || exit 1
+HEALTHCHECK CMD curl --silent --fail  | jq -ne 'input.status == true' || exit 1
 
 USER $UID:$GID
 
