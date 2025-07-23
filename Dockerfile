@@ -63,12 +63,15 @@ ENV ENV=prod \
 WORKDIR /app/backend
 ENV HOME=/root
 
+# === Fix apt sources to use HTTPS ===
 RUN echo "deb https://deb.debian.org/debian bookworm main\n\
 deb https://deb.debian.org/debian-security bookworm-security main\n\
 deb https://deb.debian.org/debian bookworm-updates main" > /etc/apt/sources.list
 
+# === Install CA certificates early for pip SSL ===
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 
+# === User/Group Setup ===
 RUN if [ "$UID" -ne 0 ]; then \
       if [ "$GID" -ne 0 ]; then addgroup --gid $GID app; fi; \
       adduser --uid $UID --gid $GID --home $HOME --disabled-password --no-create-home app; \
@@ -78,6 +81,7 @@ RUN mkdir -p $HOME/.cache/chroma \
     && echo -n 00000000-0000-0000-0000-000000000000 > $HOME/.cache/chroma/telemetry_user_id \
     && chown -R $UID:$GID /app $HOME
 
+# === Install system dependencies ===
 RUN if [ "$USE_OLLAMA" = "true" ]; then \
       apt-get update && \
       apt-get install -y --no-install-recommends \
@@ -93,6 +97,7 @@ RUN if [ "$USE_OLLAMA" = "true" ]; then \
       rm -rf /var/lib/apt/lists/*; \
     fi
 
+# === Python & pip dependencies ===
 RUN pip3 install --upgrade pip
 RUN pip3 install uv
 
@@ -105,20 +110,23 @@ RUN if [ "$USE_CUDA" = "true" ]; then \
 COPY --chown=$UID:$GID ./backend/requirements.txt ./requirements.txt
 RUN uv pip install --system -r requirements.txt --no-cache-dir
 
-# === Preload models ===
+# === Copy pre-downloaded models ===
 COPY --chown=$UID:$GID ./all-MiniLM-L6-v2 /app/backend/data/cache/embedding/models/all-MiniLM-L6-v2
 COPY --chown=$UID:$GID ./whisper/base /app/backend/data/cache/whisper/models/base
 
-RUN python -c "import os; from faster_whisper import WhisperModel; WhisperModel('base', device='cpu', compute_type='int8', download_root='/app/backend/data/cache/whisper/models')"
+# === Preload tokenizer encoding only ===
 RUN python -c "import os; import tiktoken; tiktoken.get_encoding(os.environ.get('TIKTOKEN_ENCODING_NAME','cl100k_base'))"
 RUN chown -R $UID:$GID /app/backend/data/
 
+# === Copy frontend build ===
 COPY --chown=$UID:$GID --from=build /app/build /app/build
 COPY --chown=$UID:$GID --from=build /app/CHANGELOG.md /app/CHANGELOG.md
 COPY --chown=$UID:$GID --from=build /app/package.json /app/package.json
 
+# === Copy backend files ===
 COPY --chown=$UID:$GID ./backend .
 
+# === Group permissions (OpenShift compatibility) ===
 RUN chmod -R g=u /app $HOME
 
 EXPOSE 8080
