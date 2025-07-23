@@ -4,7 +4,7 @@
 ARG USE_CUDA=false
 ARG USE_OLLAMA=false
 # Tested with cu117 for CUDA 11 and cu121 for CUDA 12 (default)
-ARG USE_CUDA_VER=cu128
+ARG USE_CUDA_VER=cu121
 # any sentence transformer model; models to use can be found at https://huggingface.co/models?library=sentence-transformers
 # Leaderboard: https://huggingface.co/spaces/mteb/leaderboard 
 # for better performance and multilangauge support use "intfloat/multilingual-e5-large" (~2.5GB) or "intfloat/multilingual-e5-base" (~1.5GB)
@@ -26,11 +26,8 @@ ARG BUILD_HASH
 
 WORKDIR /app
 
-# to store git revision in build
-RUN apk add --no-cache git
-
 COPY package.json package-lock.json ./
-RUN npm ci --force
+RUN npm ci
 
 COPY . .
 ENV APP_BUILD_HASH=${BUILD_HASH}
@@ -136,7 +133,7 @@ RUN if [ "$USE_OLLAMA" = "true" ]; then \
 # install python dependencies
 COPY --chown=$UID:$GID ./backend/requirements.txt ./requirements.txt
 
-RUN pip3 install --no-cache-dir uv && \
+RUN pip3 install uv && \
     if [ "$USE_CUDA" = "true" ]; then \
     # If you use CUDA the whisper and embedding model will be downloaded on first use
     pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/$USE_CUDA_DOCKER_VER --no-cache-dir && \
@@ -166,6 +163,10 @@ COPY --chown=$UID:$GID --from=build /app/package.json /app/package.json
 
 # copy backend files
 COPY --chown=$UID:$GID ./backend .
+
+# provide group with same permissions as user
+# allows running in OpenShift
+RUN chmod -R g=u /app $HOME
 
 EXPOSE 8080
 
