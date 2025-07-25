@@ -1,4 +1,4 @@
-# CANChat 👋
+# CANChat at HICC 👋
 
 ![GitHub stars](https://img.shields.io/github/stars/ssc-dsai/canchat-v2?style=social)
 ![GitHub forks](https://img.shields.io/github/forks/ssc-dsai/canchat-v2?style=social)
