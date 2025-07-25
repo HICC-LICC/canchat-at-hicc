@@ -33,9 +33,9 @@ ARG UID
 ARG GID
 
 # --- BEGIN OFFLINE MODEL PATHS ---
-# Set these to match the exact local paths where models are copied in Docker below.
+# Set these to match the exact local paths where models are copied in Docker below: note this may be a temporary solution until Cloud works out something better.
 ENV EMBEDDING_MODEL_PATH="/app/backend/data/cache/embedding/models/all-MiniLM-L6-v2"
-ENV RERANKING_MODEL_PATH="/app/backend/data/cache/embedding/models/all-MiniLM-L6-v2"   # Change if you use a different reranker!
+ENV RERANKING_MODEL_PATH="/app/backend/data/cache/embedding/models/all-MiniLM-L6-v2" 
 # --- END OFFLINE MODEL PATHS ---
 
 ENV ENV=prod \
@@ -68,7 +68,7 @@ ENV ENV=prod \
 WORKDIR /app/backend
 ENV HOME=/root
 
-# === Fix apt sources to use HTTPS ===
+# === Fix apt sources to use HTTPS - required by our clou services===
 RUN echo "deb https://deb.debian.org/debian bookworm main\n\
 deb https://deb.debian.org/debian-security bookworm-security main\n\
 deb https://deb.debian.org/debian bookworm-updates main" > /etc/apt/sources.list
@@ -118,7 +118,7 @@ RUN uv pip install --system -r requirements.txt --no-cache-dir
 # === Copy pre-downloaded models ===
 COPY --chown=$UID:$GID ./all-MiniLM-L6-v2 /app/backend/data/cache/embedding/models/all-MiniLM-L6-v2
 COPY --chown=$UID:$GID ./whisper/base /app/backend/data/cache/whisper/models/base
-# If you use a different reranker, add a COPY for it too!
+
 
 # === Preload tokenizer encoding only (optional) ===
 RUN python -c "import os; import tiktoken; tiktoken.get_encoding(os.environ.get('TIKTOKEN_ENCODING_NAME','cl100k_base'))"
@@ -137,7 +137,7 @@ RUN chmod -R g=u /app $HOME
 
 EXPOSE 8080
 
-# Use a real healthcheck endpoint if you have one!
+# Healthcheck
 HEALTHCHECK CMD curl --silent --fail http://localhost:8080/health || exit 1
 
 USER $UID:$GID
