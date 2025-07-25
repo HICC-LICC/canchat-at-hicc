@@ -58,7 +58,9 @@ ENV ENV=prod \
     SENTENCE_TRANSFORMERS_HOME="/app/backend/data/cache/embedding/models" \
     TIKTOKEN_ENCODING_NAME="cl100k_base" \
     TIKTOKEN_CACHE_DIR="/app/backend/data/cache/tiktoken" \
-    HF_HOME="/app/backend/data/cache/embedding/models"
+    HF_HOME="/app/backend/data/cache/embedding/models" \
+    TRANSFORMERS_CACHE="/app/backend/data/cache/embedding/models" \
+    TORCH_HOME="/app/backend/data/cache/embedding/models"
 
 WORKDIR /app/backend
 ENV HOME=/root
@@ -114,7 +116,7 @@ RUN uv pip install --system -r requirements.txt --no-cache-dir
 COPY --chown=$UID:$GID ./all-MiniLM-L6-v2 /app/backend/data/cache/embedding/models/all-MiniLM-L6-v2
 COPY --chown=$UID:$GID ./whisper/base /app/backend/data/cache/whisper/models/base
 
-# === Preload tokenizer encoding only ===
+# === Preload tokenizer encoding only (optional) ===
 RUN python -c "import os; import tiktoken; tiktoken.get_encoding(os.environ.get('TIKTOKEN_ENCODING_NAME','cl100k_base'))"
 RUN chown -R $UID:$GID /app/backend/data/
 
