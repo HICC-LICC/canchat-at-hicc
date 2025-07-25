@@ -4,9 +4,6 @@
 ARG USE_CUDA=false
 ARG USE_OLLAMA=false
 ARG USE_CUDA_VER=cu121
-ARG USE_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-ARG USE_RERANKING_MODEL=""
-ARG USE_TIKTOKEN_ENCODING_NAME="cl100k_base"
 ARG BUILD_HASH=dev-build
 ARG UID=0
 ARG GID=0
@@ -32,18 +29,24 @@ FROM python:3.11-slim-bookworm AS base
 ARG USE_CUDA
 ARG USE_OLLAMA
 ARG USE_CUDA_VER
-ARG USE_EMBEDDING_MODEL
-ARG USE_RERANKING_MODEL
 ARG UID
 ARG GID
+
+# --- BEGIN OFFLINE MODEL PATHS ---
+# Set these to match the exact local paths where models are copied in Docker below.
+ENV EMBEDDING_MODEL_PATH="/app/backend/data/cache/embedding/models/all-MiniLM-L6-v2"
+ENV RERANKING_MODEL_PATH="/app/backend/data/cache/embedding/models/all-MiniLM-L6-v2"   # Change if you use a different reranker!
+# --- END OFFLINE MODEL PATHS ---
 
 ENV ENV=prod \
     PORT=8080 \
     USE_OLLAMA_DOCKER=${USE_OLLAMA} \
     USE_CUDA_DOCKER=${USE_CUDA} \
     USE_CUDA_DOCKER_VER=${USE_CUDA_VER} \
-    USE_EMBEDDING_MODEL_DOCKER=${USE_EMBEDDING_MODEL} \
-    USE_RERANKING_MODEL_DOCKER=${USE_RERANKING_MODEL} \
+    USE_EMBEDDING_MODEL="${EMBEDDING_MODEL_PATH}" \
+    USE_RERANKING_MODEL="${RERANKING_MODEL_PATH}" \
+    USE_EMBEDDING_MODEL_DOCKER="${EMBEDDING_MODEL_PATH}" \
+    USE_RERANKING_MODEL_DOCKER="${RERANKING_MODEL_PATH}" \
     OLLAMA_BASE_URL="/ollama" \
     OPENAI_API_BASE_URL="" \
     OPENAI_API_KEY="" \
@@ -53,8 +56,8 @@ ENV ENV=prod \
     ANONYMIZED_TELEMETRY=false \
     WHISPER_MODEL="base" \
     WHISPER_MODEL_DIR="/app/backend/data/cache/whisper/models" \
-    RAG_EMBEDDING_MODEL="$USE_EMBEDDING_MODEL" \
-    RAG_RERANKING_MODEL="$USE_RERANKING_MODEL" \
+    RAG_EMBEDDING_MODEL="${EMBEDDING_MODEL_PATH}" \
+    RAG_RERANKING_MODEL="${RERANKING_MODEL_PATH}" \
     SENTENCE_TRANSFORMERS_HOME="/app/backend/data/cache/embedding/models" \
     TIKTOKEN_ENCODING_NAME="cl100k_base" \
     TIKTOKEN_CACHE_DIR="/app/backend/data/cache/tiktoken" \
@@ -115,6 +118,7 @@ RUN uv pip install --system -r requirements.txt --no-cache-dir
 # === Copy pre-downloaded models ===
 COPY --chown=$UID:$GID ./all-MiniLM-L6-v2 /app/backend/data/cache/embedding/models/all-MiniLM-L6-v2
 COPY --chown=$UID:$GID ./whisper/base /app/backend/data/cache/whisper/models/base
+# If you use a different reranker, add a COPY for it too!
 
 # === Preload tokenizer encoding only (optional) ===
 RUN python -c "import os; import tiktoken; tiktoken.get_encoding(os.environ.get('TIKTOKEN_ENCODING_NAME','cl100k_base'))"
@@ -133,7 +137,8 @@ RUN chmod -R g=u /app $HOME
 
 EXPOSE 8080
 
-HEALTHCHECK CMD curl --silent --fail  | jq -ne 'input.status == true' || exit 1
+# Use a real healthcheck endpoint if you have one!
+HEALTHCHECK CMD curl --silent --fail http://localhost:8080/health || exit 1
 
 USER $UID:$GID
 
