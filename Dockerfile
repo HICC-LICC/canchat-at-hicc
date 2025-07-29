@@ -1,9 +1,12 @@
 # syntax=docker/dockerfile:1
 
-# ==== BUILD ARGS (can override with --build-arg) ====
+# ==== BUILD ARGS ====
 ARG USE_CUDA=false
 ARG USE_OLLAMA=false
 ARG USE_CUDA_VER=cu121
+ARG USE_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+ARG USE_RERANKING_MODEL=""
+ARG USE_TIKTOKEN_ENCODING_NAME="cl100k_base"
 ARG BUILD_HASH=dev-build
 ARG UID=0
 ARG GID=0
@@ -29,24 +32,18 @@ FROM python:3.11-slim-bookworm AS base
 ARG USE_CUDA
 ARG USE_OLLAMA
 ARG USE_CUDA_VER
+ARG USE_EMBEDDING_MODEL
+ARG USE_RERANKING_MODEL
 ARG UID
 ARG GID
-
-# --- BEGIN OFFLINE MODEL PATHS ---
-# Set these to match the exact local paths where models are copied in Docker below: note this may be a temporary solution until Cloud works out something better.
-ENV EMBEDDING_MODEL_PATH="/app/backend/data/cache/embedding/models/all-MiniLM-L6-v2"
-ENV RERANKING_MODEL_PATH="/app/backend/data/cache/embedding/models/all-MiniLM-L6-v2" 
-# --- END OFFLINE MODEL PATHS ---
 
 ENV ENV=prod \
     PORT=8080 \
     USE_OLLAMA_DOCKER=${USE_OLLAMA} \
     USE_CUDA_DOCKER=${USE_CUDA} \
     USE_CUDA_DOCKER_VER=${USE_CUDA_VER} \
-    USE_EMBEDDING_MODEL="${EMBEDDING_MODEL_PATH}" \
-    USE_RERANKING_MODEL="${RERANKING_MODEL_PATH}" \
-    USE_EMBEDDING_MODEL_DOCKER="${EMBEDDING_MODEL_PATH}" \
-    USE_RERANKING_MODEL_DOCKER="${RERANKING_MODEL_PATH}" \
+    USE_EMBEDDING_MODEL_DOCKER=${USE_EMBEDDING_MODEL} \
+    USE_RERANKING_MODEL_DOCKER=${USE_RERANKING_MODEL} \
     OLLAMA_BASE_URL="/ollama" \
     OPENAI_API_BASE_URL="" \
     OPENAI_API_KEY="" \
@@ -56,19 +53,17 @@ ENV ENV=prod \
     ANONYMIZED_TELEMETRY=false \
     WHISPER_MODEL="base" \
     WHISPER_MODEL_DIR="/app/backend/data/cache/whisper/models" \
-    RAG_EMBEDDING_MODEL="${EMBEDDING_MODEL_PATH}" \
-    RAG_RERANKING_MODEL="${RERANKING_MODEL_PATH}" \
+    RAG_EMBEDDING_MODEL="$USE_EMBEDDING_MODEL" \
+    RAG_RERANKING_MODEL="$USE_RERANKING_MODEL" \
     SENTENCE_TRANSFORMERS_HOME="/app/backend/data/cache/embedding/models" \
     TIKTOKEN_ENCODING_NAME="cl100k_base" \
     TIKTOKEN_CACHE_DIR="/app/backend/data/cache/tiktoken" \
-    HF_HOME="/app/backend/data/cache/embedding/models" \
-    TRANSFORMERS_CACHE="/app/backend/data/cache/embedding/models" \
-    TORCH_HOME="/app/backend/data/cache/embedding/models"
+    HF_HOME="/app/backend/data/cache/embedding/models"
 
 WORKDIR /app/backend
 ENV HOME=/root
 
-# === Fix apt sources to use HTTPS - required by our clou services===
+# === Fix apt sources to use HTTPS ===
 RUN echo "deb https://deb.debian.org/debian bookworm main\n\
 deb https://deb.debian.org/debian-security bookworm-security main\n\
 deb https://deb.debian.org/debian bookworm-updates main" > /etc/apt/sources.list
@@ -87,24 +82,32 @@ RUN mkdir -p $HOME/.cache/chroma \
     && chown -R $UID:$GID /app $HOME
 
 # === Install system dependencies ===
-RUN if [ "$USE_OLLAMA" = "true" ]; then \
-      apt-get update && \
-      apt-get install -y --no-install-recommends \
-        git build-essential pandoc netcat-openbsd curl jq \
-        gcc python3-dev ffmpeg libsm6 libxext6 && \
-      curl -fsSL https://ollama.com/install.sh | sh && \
-      rm -rf /var/lib/apt/lists/*; \
-    else \
-      apt-get update && \
-      apt-get install -y --no-install-recommends \
-        git build-essential pandoc gcc netcat-openbsd curl jq \
-        python3-dev ffmpeg libsm6 libxext6 && \
-      rm -rf /var/lib/apt/lists/*; \
-    fi
+ARG USE_OLLAMA=false
+RUN set -eux; \
+  if [ "$USE_OLLAMA" = "true" ]; then \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      docker.io \
+      git build-essential pandoc netcat-openbsd curl jq \
+      gcc python3-dev ffmpeg libsm6 libxext6 && \
+    curl -fsSL https://ollama.com/install.sh | sh; \
+  else \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      docker.io \
+      git build-essential pandoc gcc netcat-openbsd curl jq \
+      python3-dev ffmpeg libsm6 libxext6; \
+  fi && \
+  rm -rf /var/lib/apt/lists/*
 
 # === Python & pip dependencies ===
+# Separate steps for clarity
 RUN pip3 install --upgrade pip
+
 RUN pip3 install uv
+
+ARG USE_CUDA
+ARG USE_CUDA_DOCKER_VER
 
 RUN if [ "$USE_CUDA" = "true" ]; then \
       pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/$USE_CUDA_DOCKER_VER --no-cache-dir; \
@@ -115,12 +118,9 @@ RUN if [ "$USE_CUDA" = "true" ]; then \
 COPY --chown=$UID:$GID ./backend/requirements.txt ./requirements.txt
 RUN uv pip install --system -r requirements.txt --no-cache-dir
 
-# === Copy pre-downloaded models ===
-COPY --chown=$UID:$GID ./all-MiniLM-L6-v2 /app/backend/data/cache/embedding/models/all-MiniLM-L6-v2
-COPY --chown=$UID:$GID ./whisper/base /app/backend/data/cache/whisper/models/base
-
-
-# === Preload tokenizer encoding only (optional) ===
+# === Pre-download models for a warm start ===
+RUN python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('RAG_EMBEDDING_MODEL','sentence-transformers/all-MiniLM-L6-v2'), device='cpu')"
+RUN python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ.get('WHISPER_MODEL','base'), device='cpu', compute_type='int8', download_root=os.environ.get('WHISPER_MODEL_DIR','/app/backend/data/cache/whisper/models'))"
 RUN python -c "import os; import tiktoken; tiktoken.get_encoding(os.environ.get('TIKTOKEN_ENCODING_NAME','cl100k_base'))"
 RUN chown -R $UID:$GID /app/backend/data/
 
@@ -137,8 +137,7 @@ RUN chmod -R g=u /app $HOME
 
 EXPOSE 8080
 
-# Healthcheck
-HEALTHCHECK CMD curl --silent --fail http://localhost:8080/health || exit 1
+HEALTHCHECK CMD curl --silent --fail http://localhost:${PORT:-8080}/health | jq -ne 'input.status == true' || exit 1
 
 USER $UID:$GID
 
