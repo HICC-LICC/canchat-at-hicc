@@ -53,8 +53,6 @@ ENV ENV=prod \
     ANONYMIZED_TELEMETRY=false \
     WHISPER_MODEL="base" \
     WHISPER_MODEL_DIR="/app/backend/data/cache/whisper/models" \
-    RAG_EMBEDDING_MODEL="$USE_EMBEDDING_MODEL" \
-    RAG_RERANKING_MODEL="$USE_RERANKING_MODEL" \
     SENTENCE_TRANSFORMERS_HOME="/app/backend/data/cache/embedding/models" \
     TIKTOKEN_ENCODING_NAME="cl100k_base" \
     TIKTOKEN_CACHE_DIR="/app/backend/data/cache/tiktoken" \
@@ -101,9 +99,7 @@ RUN set -eux; \
   rm -rf /var/lib/apt/lists/*
 
 # === Python & pip dependencies ===
-# Separate steps for clarity
 RUN pip3 install --upgrade pip
-
 RUN pip3 install uv
 
 ARG USE_CUDA
@@ -118,8 +114,14 @@ RUN if [ "$USE_CUDA" = "true" ]; then \
 COPY --chown=$UID:$GID ./backend/requirements.txt ./requirements.txt
 RUN uv pip install --system -r requirements.txt --no-cache-dir
 
+# === COPY LOCAL MODEL FILES ===
+COPY ./models/sentence-transformers/all-MiniLM-L6-v2 /app/backend/data/cache/embedding/models/sentence-transformers/all-MiniLM-L6-v2
+
+# Set RAG_EMBEDDING_MODEL to point to local path inside the container
+ENV RAG_EMBEDDING_MODEL=/app/backend/data/cache/embedding/models/sentence-transformers/all-MiniLM-L6-v2
+
 # === Pre-download models for a warm start ===
-RUN python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('RAG_EMBEDDING_MODEL','sentence-transformers/all-MiniLM-L6-v2'), device='cpu')"
+RUN python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('RAG_EMBEDDING_MODEL'), device='cpu')"
 RUN python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ.get('WHISPER_MODEL','base'), device='cpu', compute_type='int8', download_root=os.environ.get('WHISPER_MODEL_DIR','/app/backend/data/cache/whisper/models'))"
 RUN python -c "import os; import tiktoken; tiktoken.get_encoding(os.environ.get('TIKTOKEN_ENCODING_NAME','cl100k_base'))"
 RUN chown -R $UID:$GID /app/backend/data/
