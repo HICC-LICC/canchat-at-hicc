@@ -115,10 +115,10 @@ COPY --chown=$UID:$GID ./backend/requirements.txt ./requirements.txt
 RUN uv pip install --system -r requirements.txt --no-cache-dir
 
 # === COPY LOCAL MODEL FILES ===
-COPY ./models/sentence-transformers/all-MiniLM-L6-v2 /app/backend/data/cache/embedding/models/sentence-transformers/all-MiniLM-L6-v2
+COPY ./all-MiniLM-L6-v2 /app/backend/data/cache/embedding/models/all-MiniLM-L6-v2
 
 # Set RAG_EMBEDDING_MODEL to point to local path inside the container
-ENV RAG_EMBEDDING_MODEL=/app/backend/data/cache/embedding/models/sentence-transformers/all-MiniLM-L6-v2
+ENV RAG_EMBEDDING_MODEL=/app/backend/data/cache/embedding/models/all-MiniLM-L6-v2
 
 # === Pre-download models for a warm start ===
 RUN python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('RAG_EMBEDDING_MODEL'), device='cpu')"
