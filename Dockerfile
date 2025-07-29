@@ -123,6 +123,9 @@ ENV RAG_EMBEDDING_MODEL=/app/backend/data/cache/embedding/models/all-MiniLM-L6-v
 ENV WHISPER_MODEL_DIR=/app/backend/data/cache/whisper/models
 ENV WHISPER_MODEL=base
 
+# === DEBUG: List Whisper model files in image ===
+RUN ls -lh /app/backend/data/cache/whisper/models/base
+
 # === Pre-download models for a warm start ===
 RUN python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('RAG_EMBEDDING_MODEL'), device='cpu')"
 RUN python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ.get('WHISPER_MODEL','base'), device='cpu', compute_type='int8', download_root=os.environ.get('WHISPER_MODEL_DIR','/app/backend/data/cache/whisper/models'))"
