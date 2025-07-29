@@ -116,9 +116,12 @@ RUN uv pip install --system -r requirements.txt --no-cache-dir
 
 # === COPY LOCAL MODEL FILES ===
 COPY ./all-MiniLM-L6-v2 /app/backend/data/cache/embedding/models/all-MiniLM-L6-v2
+COPY ./whisper /app/backend/data/cache/whisper/models
 
-# Set RAG_EMBEDDING_MODEL to point to local path inside the container
+# Set environment variables to point to local model paths
 ENV RAG_EMBEDDING_MODEL=/app/backend/data/cache/embedding/models/all-MiniLM-L6-v2
+ENV WHISPER_MODEL_DIR=/app/backend/data/cache/whisper/models
+ENV WHISPER_MODEL=base
 
 # === Pre-download models for a warm start ===
 RUN python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('RAG_EMBEDDING_MODEL'), device='cpu')"
