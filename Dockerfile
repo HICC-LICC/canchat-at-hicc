@@ -112,7 +112,10 @@ RUN if [ "$USE_CUDA" = "true" ]; then \
     fi
 
 COPY --chown=$UID:$GID ./backend/requirements.txt ./requirements.txt
-RUN uv pip install --system -r requirements.txt --no-cache-dir
+
+# === Install Python deps with a pinned pyarrow to avoid PyExtensionType error ===
+RUN printf "pyarrow==20.0.0\n" > /tmp/constraints.txt \
+ && uv pip install --system -r requirements.txt -c /tmp/constraints.txt --no-cache-dir
 
 # === COPY LOCAL MODEL FILES ===
 COPY ./all-MiniLM-L6-v2 /app/backend/data/cache/embedding/models/all-MiniLM-L6-v2
