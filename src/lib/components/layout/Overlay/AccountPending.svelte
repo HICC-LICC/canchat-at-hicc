@@ -4,7 +4,7 @@
 
 	const translations = {
 		'en-GB': {
-			welcome: 'Welcome to CANChat',
+			welcome: 'Welcome to CanChat at HICC',
 			message: 'Please wait while we activate your account.',
 			message2: '(approx. 10 minutes)',
 			message3: 'Issues with your activation?',
@@ -12,7 +12,7 @@
 			signout: 'Sign Out'
 		},
 		'fr-CA': {
-			welcome: 'Bienvenue sur CANChat',
+			welcome: 'Bienvenue sur CanChat at HICC',
 			message: 'Veuillez patienter pendant que nous activons votre compte.',
 			message2: '(environ 10 minutes)',
 			message3: 'Des problèmes avec votre activation?',
@@ -73,7 +73,7 @@
 					{currentTranslation.message3}
 					<br />
 					<a
-						href="mailto:dsaiclientengagement.sdiaclientmobilisation@ssc-spc.gc.ca"
+						href="mailto:datascience-sciencedesdonnees@infc.gc.ca"
 						class="underline"
 					>
 						{currentTranslation.action}
