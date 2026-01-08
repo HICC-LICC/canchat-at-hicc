@@ -1,4 +1,4 @@
-# Welcome to CANChat 👋
+# This is CanChat @ HICC, a clone of SSC's Data Science & Artificial Intelligence CANChat. Welcome 👋
 
 ![GitHub stars](https://img.shields.io/github/stars/ssc-dsai/canchat-v2?style=social)
 ![GitHub forks](https://img.shields.io/github/forks/ssc-dsai/canchat-v2?style=social)
@@ -260,7 +260,7 @@ If you have any questions, suggestions, or need assistance, please see our
 
 ---
 
-# Bienvenue à CANChat
+# Ceci est CanChat @ HICC, un clone de CANChat de l'équipe Science de données et IA à SPC, bienvenue 👋
 
 **CANChat est une plateforme d’intelligence artificielle (IA) auto-hébergée, extensible, riche en fonctionnalités et conviviale, conçue pour fonctionner entièrement hors ligne.** Elle prend en charge divers moteurs LLM comme **Ollama** et les **APIs compatibles avec OpenAI**, avec un **moteur d'inférence intégré** pour le RAG, faisant ainsi de CANChat une **puissante solution de déploiement IA**.
 
